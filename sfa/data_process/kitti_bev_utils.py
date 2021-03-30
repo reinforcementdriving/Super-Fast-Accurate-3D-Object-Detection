@@ -4,14 +4,19 @@
 """
 
 import math
+import os
 import sys
 
 import cv2
 import numpy as np
 
-sys.path.append('../')
+src_dir = os.path.dirname(os.path.realpath(__file__))
+while not src_dir.endswith("sfa"):
+    src_dir = os.path.dirname(src_dir)
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
 
-import sfa.config.kitti_config as cnf
+import config.kitti_config as cnf
 
 
 def makeBEVMap(PointCloud_, boundary):
@@ -24,27 +29,21 @@ def makeBEVMap(PointCloud_, boundary):
     PointCloud[:, 1] = np.int_(np.floor(PointCloud[:, 1] / cnf.DISCRETIZATION) + Width / 2)
 
     # sort-3times
-    indices = np.lexsort((-PointCloud[:, 2], PointCloud[:, 1], PointCloud[:, 0]))
-    PointCloud = PointCloud[indices]
+    sorted_indices = np.lexsort((-PointCloud[:, 2], PointCloud[:, 1], PointCloud[:, 0]))
+    PointCloud = PointCloud[sorted_indices]
+    _, unique_indices, unique_counts = np.unique(PointCloud[:, 0:2], axis=0, return_index=True, return_counts=True)
+    PointCloud_top = PointCloud[unique_indices]
 
-    # Height Map
+    # Height Map, Intensity Map & Density Map
     heightMap = np.zeros((Height, Width))
-
-    _, indices = np.unique(PointCloud[:, 0:2], axis=0, return_index=True)
-    PointCloud_frac = PointCloud[indices]
-    # some important problem is image coordinate is (y,x), not (x,y)
-    max_height = float(np.abs(boundary['maxZ'] - boundary['minZ']))
-    heightMap[np.int_(PointCloud_frac[:, 0]), np.int_(PointCloud_frac[:, 1])] = PointCloud_frac[:, 2] / max_height
-
-    # Intensity Map & DensityMap
     intensityMap = np.zeros((Height, Width))
     densityMap = np.zeros((Height, Width))
 
-    _, indices, counts = np.unique(PointCloud[:, 0:2], axis=0, return_index=True, return_counts=True)
-    PointCloud_top = PointCloud[indices]
+    # some important problem is image coordinate is (y,x), not (x,y)
+    max_height = float(np.abs(boundary['maxZ'] - boundary['minZ']))
+    heightMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = PointCloud_top[:, 2] / max_height
 
-    normalizedCounts = np.minimum(1.0, np.log(counts + 1) / np.log(64))
-
+    normalizedCounts = np.minimum(1.0, np.log(unique_counts + 1) / np.log(64))
     intensityMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = PointCloud_top[:, 3]
     densityMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = normalizedCounts
 
